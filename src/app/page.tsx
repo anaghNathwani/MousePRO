@@ -6,6 +6,7 @@ import UploadZone from '@/components/UploadZone';
 import CursorEditor from '@/components/CursorEditor';
 import PreviewArea from '@/components/PreviewArea';
 import ExportModal from '@/components/ExportModal';
+import ApplyButton from '@/components/ApplyButton';
 import { useStore } from '@/lib/store';
 
 export default function Home() {
@@ -112,10 +113,16 @@ export default function Home() {
                 <div className="w-80 flex-shrink-0 overflow-hidden p-5 flex flex-col gap-4">
                   <PreviewArea />
 
+                  {/* Apply to system */}
+                  <ApplyButton />
+
+                  {/* Divider */}
+                  <div className="h-px bg-white/[0.05]" />
+
                   {/* Quick export */}
                   <button
                     onClick={() => setShowExportModal(true)}
-                    className="btn btn-primary w-full justify-center text-sm"
+                    className="btn btn-secondary w-full justify-center text-sm"
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />

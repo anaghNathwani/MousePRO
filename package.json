@@ -25,6 +25,13 @@
       "package.json",
       "next.config.js"
     ],
+    "extraResources": [
+      {
+        "from": "helper/MousePROHelper",
+        "to": "MousePROHelper",
+        "filter": ["**/*"]
+      }
+    ],
     "mac": {
       "category": "public.app-category.utilities",
       "target": [
