@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, Menu, shell, nativeTheme, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, Menu, shell, nativeTheme, ipcMain, dialog, systemPreferences } = require('electron');
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
@@ -69,26 +69,17 @@ function startProductionServer() {
 ipcMain.handle('cursor:check', async () => {
   const hasHelper = helperExists();
   const hasMousecape = mousecapeInstalled();
-
-  let accessibilityTrusted = false;
-  if (hasHelper) {
-    try {
-      const { stdout } = await execAsync(`"${helperPath()}" --check`);
-      accessibilityTrusted = stdout.trim() === 'trusted';
-    } catch { /* helper may not be runnable yet */ }
-  }
-
+  // Ask Electron directly — this is the only reliable way to check AX trust
+  // on macOS (subprocess checks are ignored by the OS).
+  const accessibilityTrusted = systemPreferences.isTrustedAccessibilityClient(false);
   return { hasHelper, hasMousecape, accessibilityTrusted };
 });
 
 ipcMain.handle('cursor:request-permission', async () => {
-  if (!helperExists()) return { granted: false, reason: 'no-helper' };
-  try {
-    const { stdout } = await execAsync(`"${helperPath()}" --request-permission`);
-    return { granted: stdout.trim() === 'granted' };
-  } catch (e) {
-    return { granted: false, reason: e.message };
-  }
+  // Passing true triggers the macOS permission dialog from the Electron
+  // process, which is what macOS requires — child processes cannot prompt.
+  const granted = systemPreferences.isTrustedAccessibilityClient(true);
+  return { granted };
 });
 
 ipcMain.handle('cursor:apply', async (_event, { imageBase64, hotspotX, hotspotY, size }) => {
