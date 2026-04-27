@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '@/lib/store';
 import CursorCard from './CursorCard';
+import MousecapePanel from './MousecapePanel';
 
 export default function Sidebar() {
   const { projects, processingOptions, setProcessingOptions, isProcessing, processingProgress } = useStore();
@@ -71,6 +72,9 @@ export default function Sidebar() {
           )}
         </AnimatePresence>
       </div>
+
+      {/* Mousecape integration */}
+      <MousecapeSidebarSection />
 
       {/* Processing options */}
       <div className="border-t border-white/[0.04]">
@@ -155,5 +159,45 @@ export default function Sidebar() {
         </AnimatePresence>
       </div>
     </aside>
+  );
+}
+
+function MousecapeSidebarSection() {
+  const [open, setOpen] = useState(true);
+  return (
+    <div className="border-t border-white/[0.04]">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 text-xs text-white/30 hover:text-white/50 hover:bg-white/[0.02] transition-all"
+      >
+        <div className="flex items-center gap-2">
+          {/* Mousecape icon */}
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M4 2L4 16L8 12L11 19L13 18L10 11L15 11L4 2Z" fill="currentColor" strokeLinejoin="round" />
+          </svg>
+          <span className="font-semibold uppercase tracking-widest text-[10px]">Mousecape</span>
+        </div>
+        <motion.svg
+          animate={{ rotate: open ? 180 : 0 }}
+          transition={{ duration: 0.2 }}
+          width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </motion.svg>
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <MousecapePanel />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }

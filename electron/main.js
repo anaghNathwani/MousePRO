@@ -64,6 +64,137 @@ function startProductionServer() {
   nextServerProcess.stderr.on('data', (d) => console.error('[next]', d.toString().trim()));
 }
 
+// ─── Mousecape library helpers ─────────────────────────────────────────────
+
+const MOUSECAPE_APP = '/Applications/Mousecape.app';
+
+// Mousecape stores capes in different places depending on sandboxing
+const MOUSECAPE_LIBRARY_CANDIDATES = [
+  path.join(os.homedir(), 'Library', 'Application Support', 'Mousecape'),
+  path.join(os.homedir(), 'Library', 'Containers', 'com.alexzielenski.Mousecape',
+    'Data', 'Library', 'Application Support', 'Mousecape'),
+];
+
+function findMousecapeLibrary() {
+  for (const p of MOUSECAPE_LIBRARY_CANDIDATES) {
+    if (fs.existsSync(p)) return p;
+  }
+  // If neither exists yet but Mousecape is installed, use the first candidate
+  // and create it so we can write there.
+  if (fs.existsSync(MOUSECAPE_APP)) {
+    fs.mkdirSync(MOUSECAPE_LIBRARY_CANDIDATES[0], { recursive: true });
+    return MOUSECAPE_LIBRARY_CANDIDATES[0];
+  }
+  return null;
+}
+
+// Minimal plist parser — good enough for the .cape format we generate and read
+function parseCape(xml) {
+  const capeName = (xml.match(/<key>Cape Name<\/key>\s*<string>([\s\S]*?)<\/string>/) ?? [])[1]?.trim() ?? 'Unnamed';
+
+  const cursors = [];
+  // Each cursor is a <dict> inside the <key>Cursors</key> <array>
+  const cursorsSection = (xml.match(/<key>Cursors<\/key>\s*<array>([\s\S]*?)<\/array>/) ?? [])[1] ?? '';
+  const dicts = cursorsSection.match(/<dict>[\s\S]*?<\/dict>/g) ?? [];
+
+  for (const dict of dicts) {
+    const name = (dict.match(/<key>Name<\/key>\s*<string>([\s\S]*?)<\/string>/) ?? [])[1]?.trim();
+    const hotspotX = parseFloat((dict.match(/<key>HotSpotX<\/key>\s*<real>([\d.]+)<\/real>/) ?? [])[1] ?? '0');
+    const hotspotY = parseFloat((dict.match(/<key>HotSpotY<\/key>\s*<real>([\d.]+)<\/real>/) ?? [])[1] ?? '0');
+
+    // Collect representations
+    const repSection = (dict.match(/<key>Representations<\/key>\s*<array>([\s\S]*?)<\/array>/) ?? [])[1] ?? '';
+    const repDicts = repSection.match(/<dict>[\s\S]*?<\/dict>/g) ?? [];
+
+    const sizes = [];
+    for (const rep of repDicts) {
+      const scale = parseFloat((rep.match(/<key>Scale<\/key>\s*<real>([\d.]+)<\/real>/) ?? [])[1] ?? '1');
+      const pngData = (rep.match(/<key>PNG Data<\/key>\s*<data>([\s\S]*?)<\/data>/) ?? [])[1]?.replace(/\s/g, '');
+      if (pngData) {
+        // scale 1 = 32px, scale 2 = 64px (standard Mousecape sizes)
+        sizes.push({ size: scale === 2 ? 64 : 32, data: pngData });
+      }
+    }
+
+    if (name && sizes.length > 0) {
+      cursors.push({ name, hotspot: { x: hotspotX, y: hotspotY }, sizes, preview: sizes[0].data });
+    }
+  }
+
+  return { name: capeName, cursors };
+}
+
+// ─── Mousecape IPC handlers ────────────────────────────────────────────────
+
+ipcMain.handle('mousecape:status', async () => {
+  const installed = fs.existsSync(MOUSECAPE_APP);
+  const libraryPath = findMousecapeLibrary();
+
+  const sets = [];
+  if (libraryPath) {
+    const files = fs.readdirSync(libraryPath).filter((f) => f.endsWith('.cape'));
+    for (const file of files) {
+      const filePath = path.join(libraryPath, file);
+      try {
+        const xml = fs.readFileSync(filePath, 'utf8');
+        const parsed = parseCape(xml);
+        sets.push({
+          id: file,
+          name: parsed.name,
+          path: filePath,
+          // Send only the first cursor's preview image to keep payload small
+          preview: parsed.cursors[0]?.preview ?? null,
+          cursorCount: parsed.cursors.length,
+        });
+      } catch { /* skip malformed files */ }
+    }
+  }
+
+  return { installed, libraryPath, sets };
+});
+
+ipcMain.handle('mousecape:push', async (_event, { capeXML, name }) => {
+  const libraryPath = findMousecapeLibrary();
+  const safeName = name.replace(/[^a-z0-9_-]/gi, '_');
+
+  if (libraryPath) {
+    const capePath = path.join(libraryPath, `${safeName}.cape`);
+    fs.writeFileSync(capePath, capeXML, 'utf8');
+    // Open the file in Mousecape so it registers and shows in its list
+    await execAsync(`open -a '${MOUSECAPE_APP}' '${capePath}'`).catch(() => {});
+    return { success: true, method: 'library', capePath };
+  }
+
+  // No library — open from temp
+  const tmpPath = path.join(os.tmpdir(), `${safeName}.cape`);
+  fs.writeFileSync(tmpPath, capeXML, 'utf8');
+  await execAsync(`open -a '${MOUSECAPE_APP}' '${tmpPath}'`).catch(() => {});
+  return { success: true, method: 'open', capePath: tmpPath };
+});
+
+ipcMain.handle('mousecape:remove', async (_event, { capePath }) => {
+  try {
+    fs.unlinkSync(capePath);
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('mousecape:launch', async () => {
+  await execAsync(`open -a '${MOUSECAPE_APP}'`).catch(() => {});
+  return { success: true };
+});
+
+ipcMain.handle('mousecape:read-set', async (_event, { capePath }) => {
+  try {
+    const xml = fs.readFileSync(capePath, 'utf8');
+    return { success: true, ...parseCape(xml) };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
 // ─── IPC: cursor application ────────────────────────────────────────────────
 
 ipcMain.handle('cursor:check', async () => {
