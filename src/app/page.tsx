@@ -7,6 +7,7 @@ import CursorEditor from '@/components/CursorEditor';
 import PreviewArea from '@/components/PreviewArea';
 import ExportModal from '@/components/ExportModal';
 import ApplyButton from '@/components/ApplyButton';
+import PresetsGrid from '@/components/PresetsGrid';
 import { useStore } from '@/lib/store';
 
 export default function Home() {
@@ -47,6 +48,9 @@ export default function Home() {
                 className="flex-1 flex flex-col overflow-y-auto"
               >
                 <UploadZone />
+
+                {/* Presets */}
+                <PresetsGrid />
 
                 {/* Feature showcase */}
                 <div className="px-8 pb-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 max-w-5xl mx-auto w-full">
